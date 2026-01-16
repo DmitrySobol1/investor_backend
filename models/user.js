@@ -13,18 +13,25 @@ const UserSchema = new mongoose.Schema(
     name: {
       type: String,
     },
-    isPayed: {
+    isSetPassword: {
       type: Boolean,
       default:false
     },
-    dateTillPayed: {
-      type: Date,
-      default: null
+    password_hashed: {
+      type : String
     },
-    isOnboarded: {
+    isFirstEnter : {
       type: Boolean,
-      default:false
+      default : true
     },
+    name: {
+      type: String
+    },
+    role: {
+      type: String,
+      enum: ['user', 'admin'],
+      default: 'user'
+    }
     
     
   },
