@@ -22,20 +22,9 @@ const DepositSchema = new mongoose.Schema(
      amountInEur: {
       type: Number,
     },
-     profitPercent: {
-      type: Number,
-      default: 0
-    },
-    //  profitEur: {
-    //   type: Number,
-    //   default: 0
-    // },
-
      exchangeRate: {
       type: Number,
     },
-
-    
     period: {
       type: Number,
     },

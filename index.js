@@ -14,6 +14,7 @@ import WalletAdressModel from './models/walletadress.js'
 import ChangePasswordRqstModel from './models/changepassword_rqst.js'
 import QuestionToSupportModel from './models/questionToSupport.js'
 import BitcoinPriceModel from './models/bitcoinPrice.js'
+import DepositOperationsModel from './models/deposit_operations.js'
 
 const app = express();
 const PORT = process.env.PORT || 4444;
@@ -895,9 +896,21 @@ app.get('/api/admin_get_deposit_one/:depositId', async (req, res) => {
       });
     }
 
+    // Получаем операции по депозиту
+    const operations = await DepositOperationsModel.find({ deposit_link: depositId })
+      .sort({ number_of_week: 1 });
+
+    // Рассчитываем текущую стоимость портфеля (последний week_finish_amount где isFilled = true)
+    const filledOperations = operations.filter(op => op.isFilled);
+    const currentPortfolioValue = filledOperations.length > 0
+      ? filledOperations[filledOperations.length - 1].week_finish_amount
+      : deposit.amountInEur;
+
     return res.json({
       status: 'success',
-      data: deposit
+      data: deposit,
+      operations: operations,
+      currentPortfolioValue: currentPortfolioValue
     });
   } catch (err) {
     console.error('Admin get deposit one error:', err);
@@ -933,6 +946,106 @@ app.put('/api/admin_update_deposit_profit/:depositId', async (req, res) => {
     });
   } catch (err) {
     console.error('Admin update deposit profit error:', err);
+    return res.status(500).json({
+      status: 'error',
+      message: 'Internal server error'
+    });
+  }
+});
+
+// Админ: обновить операцию по депозиту (profit_percent)
+app.put('/api/admin_update_deposit_operation/:operationId', async (req, res) => {
+  try {
+    const { operationId } = req.params;
+    const { profit_percent } = req.body;
+
+    const operation = await DepositOperationsModel.findById(operationId);
+
+    if (!operation) {
+      return res.status(404).json({
+        status: 'error',
+        message: 'Operation not found'
+      });
+    }
+
+    // Пересчитываем week_finish_amount
+    const profitEur = operation.week_start_amount * profit_percent / 100;
+    const week_finish_amount = Number((operation.week_start_amount + profitEur).toFixed(2));
+
+    // Если первый раз редактируем (isFilled = false) - создаём следующую операцию
+    if (!operation.isFilled && !operation.next_operation) {
+      // Рассчитываем даты следующей недели
+      const nextWeekNumber = operation.number_of_week + 1;
+
+      // Дата начала следующей недели = дата окончания текущей + 1 день
+      const nextWeekStart = new Date(operation.week_date_finish);
+      nextWeekStart.setDate(nextWeekStart.getDate() + 1);
+      nextWeekStart.setHours(0, 0, 0, 0);
+
+      // Дата окончания следующей недели = начало + 6 дней (воскресенье)
+      const nextWeekEnd = new Date(nextWeekStart);
+      nextWeekEnd.setDate(nextWeekStart.getDate() + 6);
+      nextWeekEnd.setHours(23, 59, 59, 999);
+
+      // Создаём новую операцию
+      const newOperation = await DepositOperationsModel.create({
+        user_link: operation.user_link,
+        deposit_link: operation.deposit_link,
+        week_date_start: nextWeekStart,
+        week_date_finish: nextWeekEnd,
+        week_start_amount: week_finish_amount,
+        week_finish_amount: week_finish_amount,
+        number_of_week: nextWeekNumber,
+        profit_percent: 0,
+        isFilled: false
+      });
+
+      // Обновляем текущую операцию с ссылкой на новую
+      const updatedOperation = await DepositOperationsModel.findByIdAndUpdate(
+        operationId,
+        {
+          profit_percent: profit_percent,
+          week_finish_amount: week_finish_amount,
+          isFilled: true,
+          next_operation: newOperation._id
+        },
+        { new: true }
+      );
+
+      return res.json({
+        status: 'success',
+        data: updatedOperation,
+        newOperation: newOperation
+      });
+    }
+
+    // Если есть next_operation - обновляем week_start_amount у следующей операции
+    if (operation.next_operation) {
+      await DepositOperationsModel.findByIdAndUpdate(
+        operation.next_operation,
+        {
+          week_start_amount: week_finish_amount,
+          week_finish_amount: week_finish_amount
+        }
+      );
+    }
+
+    const updatedOperation = await DepositOperationsModel.findByIdAndUpdate(
+      operationId,
+      {
+        profit_percent: profit_percent,
+        week_finish_amount: week_finish_amount,
+        isFilled: true
+      },
+      { new: true }
+    );
+
+    return res.json({
+      status: 'success',
+      data: updatedOperation
+    });
+  } catch (err) {
+    console.error('Admin update deposit operation error:', err);
     return res.status(500).json({
       status: 'error',
       message: 'Internal server error'
@@ -1015,6 +1128,35 @@ app.post('/api/create_new_deposit', async (req, res) => {
       date_until: dateUntil,
       riskPercent: depositRequest.riskPercent,
       isActive: true
+    });
+
+    // Создаём первую запись операции по депозиту
+    const today = new Date();
+
+    // Номер текущей недели в году
+    const startOfYear = new Date(today.getFullYear(), 0, 1);
+    const days = Math.floor((today.getTime() - startOfYear.getTime()) / (24 * 60 * 60 * 1000));
+    const numberOfWeek = Math.ceil((days + startOfYear.getDay() + 1) / 7);
+
+    // Дата окончания текущей недели (воскресенье)
+    const dayOfWeek = today.getDay();
+    const diffToSunday = dayOfWeek === 0 ? 0 : 7 - dayOfWeek;
+    const weekEnd = new Date(today);
+    weekEnd.setDate(today.getDate() + diffToSunday);
+    weekEnd.setHours(23, 59, 59, 999);
+
+    const weekStartAmount = Number((depositRequest.amount * Number(exchangeRate)).toFixed(2));
+
+    await DepositOperationsModel.create({
+      user_link: depositRequest.user._id,
+      deposit_link: deposit._id,
+      week_date_start: today,
+      week_date_finish: weekEnd,
+      week_start_amount: weekStartAmount,
+      week_finish_amount: weekStartAmount,
+      number_of_week: numberOfWeek,
+      profit_percent: 0,
+      isFilled: false
     });
 
     // Обновляем заявку - помечаем как обработанную
