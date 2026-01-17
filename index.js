@@ -1196,14 +1196,81 @@ app.get('/api/get_user_deposits/:tlgid', async (req, res) => {
 
     // Находим все депозиты пользователя, сортировка по дате создания (по возрастанию)
     const deposits = await DepositModel.find({ user: user._id })
-      .sort({ createdAt: 1 });
+      .sort({ createdAt: 1 })
+      .lean();
+
+    // Для каждого депозита вычисляем currentPortfolioValue
+    const depositsWithPortfolioValue = await Promise.all(
+      deposits.map(async (deposit) => {
+        // Находим последнюю заполненную операцию по данному депозиту
+        const lastFilledOperation = await DepositOperationsModel.findOne({
+          deposit_link: deposit._id,
+          isFilled: true
+        }).sort({ number_of_week: -1 });
+
+        const currentPortfolioValue = lastFilledOperation
+          ? lastFilledOperation.week_finish_amount
+          : deposit.amountInEur;
+
+        return {
+          ...deposit,
+          currentPortfolioValue
+        };
+      })
+    );
 
     return res.json({
       status: 'success',
-      data: deposits
+      data: depositsWithPortfolioValue
     });
   } catch (err) {
     console.error('Get user deposits error:', err);
+    return res.status(500).json({
+      status: 'error',
+      message: 'Internal server error'
+    });
+  }
+});
+
+// ===============================================
+// Получить один депозит по ID (для пользователя)
+// ===============================================
+app.get('/api/get_deposit_one/:depositId', async (req, res) => {
+  try {
+    const { depositId } = req.params;
+
+    const deposit = await DepositModel.findById(depositId);
+
+    if (!deposit) {
+      return res.status(404).json({
+        status: 'error',
+        message: 'Deposit not found'
+      });
+    }
+
+    // Находим все заполненные операции по данному депозиту
+    const operations = await DepositOperationsModel.find({
+      deposit_link: deposit._id,
+      isFilled: true
+    }).sort({ number_of_week: 1 });
+
+    // Берём последнюю для currentPortfolioValue
+    const lastFilledOperation = operations.length > 0
+      ? operations[operations.length - 1]
+      : null;
+
+    const currentPortfolioValue = lastFilledOperation
+      ? lastFilledOperation.week_finish_amount
+      : deposit.amountInEur;
+
+    return res.json({
+      status: 'success',
+      data: deposit,
+      operations,
+      currentPortfolioValue
+    });
+  } catch (err) {
+    console.error('Get deposit one error:', err);
     return res.status(500).json({
       status: 'error',
       message: 'Internal server error'
