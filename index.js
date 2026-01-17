@@ -15,6 +15,7 @@ import ChangePasswordRqstModel from './models/changepassword_rqst.js'
 import QuestionToSupportModel from './models/questionToSupport.js'
 import BitcoinPriceModel from './models/bitcoinPrice.js'
 import DepositOperationsModel from './models/deposit_operations.js'
+import CryptoRateModel from './models/cryptoRate.js'
 
 const app = express();
 const PORT = process.env.PORT || 4444;
@@ -750,6 +751,11 @@ app.post('/api/create_deposit_request', async (req, res) => {
       });
     }
 
+    // Нормализуем amount: если пришла строка с запятой, заменяем на точку
+    const normalizedAmount = typeof amount === 'string'
+      ? Number(amount.replace(',', '.'))
+      : Number(amount);
+
     // Находим пользователя по tlgid
     const user = await UserModel.findOne({ tlgid });
 
@@ -777,7 +783,7 @@ app.post('/api/create_deposit_request', async (req, res) => {
       user: user._id,
       valute,
       cryptoCashCurrency,
-      amount,
+      amount: normalizedAmount,
       period,
       riskPercent,
       isOperated: false
@@ -1283,7 +1289,7 @@ app.get('/api/get_deposit_one/:depositId', async (req, res) => {
 // ===============================================
 app.get('/api/admin_get_all_users', async (req, res) => {
   try {
-    const users = await UserModel.find({ role: 'user' })
+    const users = await UserModel.find({ role: { $ne: 'admin' } })
       .select('-password_hashed')
       .sort({ createdAt: -1 })
       .lean();
@@ -1788,6 +1794,60 @@ app.get('/api/bitcoin_prices', async (req, res) => {
     res.status(500).json({ status: 'error', message: err.message });
   }
 });
+
+
+// ***********************************
+// Получить все курсы из БД cryptoRate
+// ***********************************
+app.get('/api/get_crypto_rates', async (req, res) => {
+  try {
+    const rates = await CryptoRateModel.find().lean();
+    res.json({
+      status: 'success',
+      data: rates
+    });
+  } catch (error) {
+    res.status(500).json({ status: 'error', message: error.message });
+  }
+});
+
+// ***********************************
+// записать инфо в БД cryptoRate
+// ***********************************
+
+app.post('/api/update_crypto_rate', async (req, res) => {
+  try {
+    const { name, value } = req.body;
+
+    if (!name || value === undefined) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'name and value are required'
+      });
+    }
+
+    // Нормализуем value: если пришла строка с запятой, заменяем на точку
+    const normalizedValue = typeof value === 'string'
+      ? Number(value.replace(',', '.'))
+      : Number(value);
+
+    // Ищем и обновляем, или создаём новый если не найден
+    const cryptoRate = await CryptoRateModel.findOneAndUpdate(
+      { name },
+      { value: normalizedValue },
+      { new: true, upsert: true }
+    );
+
+    res.json({
+      status: 'success',
+      data: cryptoRate
+    });
+  } catch (error) {
+    res.status(500).json({ status: 'error', message: error.message });
+  }
+});
+
+
 
 // 404 handler
 app.use((req, res) => {
