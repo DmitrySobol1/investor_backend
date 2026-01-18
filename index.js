@@ -504,7 +504,7 @@ async function createNewUser(tlgid, username, language) {
 
 
 app.post('/api/enter_fromBot', async (req, res) => {
-   const { tlgid, username, firstname } = req.body; 
+   const { tlgid, username, firstname, language } = req.body; 
   const createresponse = await createNewUser_fromBot(tlgid, username, firstname, language);
   return res.json({ "result": "okkk" });
 })
