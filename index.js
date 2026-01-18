@@ -505,17 +505,18 @@ async function createNewUser(tlgid, username, language) {
 
 app.post('/api/enter_fromBot', async (req, res) => {
    const { tlgid, username, firstname } = req.body; 
-  const createresponse = await createNewUser_fromBot(tlgid, username, firstname);
+  const createresponse = await createNewUser_fromBot(tlgid, username, firstname, language);
   return res.json({ "result": "okkk" });
 })
 
-async function createNewUser_fromBot(tlgid, username, firstname) {
+async function createNewUser_fromBot(tlgid, username, firstname, language) {
   try {
     const doc = new UserModel({
       tlgid: tlgid,
       username: username,
       name: firstname,
-      isFirstEnter: false
+      isFirstEnter: false,
+      language: language
     });
 
     const user = await doc.save();
