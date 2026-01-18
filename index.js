@@ -502,6 +502,37 @@ async function createNewUser(tlgid, username, language) {
   }
 }
 
+
+app.post('/api/enter_fromBot', async (req, res) => {
+   const { tlgid, username, firstname } = req.body; 
+  const createresponse = await createNewUser_fromBot(tlgid, username, firstname);
+  return res.json({ "result": "okkk" });
+})
+
+async function createNewUser_fromBot(tlgid, username, firstname) {
+  try {
+    const doc = new UserModel({
+      tlgid: tlgid,
+      username: username,
+      name: firstname,
+      isFirstEnter: false
+    });
+
+    const user = await doc.save();
+
+    if (!user) {
+      throw new Error('ошибка при создании пользователя в бд UserModel');
+    }
+
+    return { status: 'created' };
+  } catch (err) {
+    return false;
+  }
+}
+
+
+
+
 // ===============================================
 // Отправка сообщения в Telegram бота
 // ===============================================
