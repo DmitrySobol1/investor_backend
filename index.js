@@ -408,23 +408,32 @@ app.post('/api/set_onboarded', async (req, res) => {
 // вход пользователя в аппку
 app.post('/api/enter', async (req, res) => {
   try {
-    const { tlgid, username } = req.body; 
+    const { tlgid, username, language } = req.body; 
 
     let user = await UserModel.findOne({ tlgid: tlgid });
 
     // Создание юзера если не существует
     if (!user) {
-      const createresponse = await createNewUser(tlgid, username);
+      const createresponse = await createNewUser(tlgid, username, language);
+
+      console.log('createresponse', createresponse)
 
       if (createresponse && createresponse.status === 'created') {
         const userData = {};
         console.log('showSetPassword');
         userData.result = 'showSetPassword';
         userData.isFirstEnter = true;
-        userData.language = 'de'; // дефолтный язык для нового юзера
+        userData.language = language; // дефолтный язык для нового юзера
         return res.json({ userData });
       } else {
-        return res.json({ statusBE: 'notOk' });
+        // Race condition: user might have been created by parallel request
+        user = await UserModel.findOne({ tlgid: tlgid });
+        if (!user) {
+          // Still no user - real error
+          return res.json({ statusBE: 'notOk' });
+        }
+        // User exists - fall through to existing user logic below
+        console.log('User found after race condition, continuing with normal flow');
       }
     }
 
@@ -450,11 +459,12 @@ app.post('/api/enter', async (req, res) => {
   return res.json({ statusBE: 'notOk' });
 });
 
-async function createNewUser(tlgid, username) {
+async function createNewUser(tlgid, username, language) {
   try {
     const doc = new UserModel({
       tlgid: tlgid,
-      username: username
+      username: username,
+      language : language
     });
 
     const user = await doc.save();
