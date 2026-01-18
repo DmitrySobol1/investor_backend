@@ -408,19 +408,20 @@ app.post('/api/set_onboarded', async (req, res) => {
 // вход пользователя в аппку
 app.post('/api/enter', async (req, res) => {
   try {
-    const { tlgid } = req.body;
+    const { tlgid, username } = req.body; 
 
     let user = await UserModel.findOne({ tlgid: tlgid });
 
     // Создание юзера если не существует
     if (!user) {
-      const createresponse = await createNewUser(tlgid);
+      const createresponse = await createNewUser(tlgid, username);
 
       if (createresponse && createresponse.status === 'created') {
         const userData = {};
         console.log('showSetPassword');
         userData.result = 'showSetPassword';
-        userData.isFirstEnter = true
+        userData.isFirstEnter = true;
+        userData.language = 'de'; // дефолтный язык для нового юзера
         return res.json({ userData });
       } else {
         return res.json({ statusBE: 'notOk' });
@@ -449,10 +450,11 @@ app.post('/api/enter', async (req, res) => {
   return res.json({ statusBE: 'notOk' });
 });
 
-async function createNewUser(tlgid) {
+async function createNewUser(tlgid, username) {
   try {
     const doc = new UserModel({
       tlgid: tlgid,
+      username: username
     });
 
     const user = await doc.save();
@@ -872,7 +874,7 @@ app.post('/api/edit_wallet_adress', async (req, res) => {
 app.get('/api/admin_get_deposit_rqst', async (req, res) => {
   try {
     const depositRequests = await DepositRqstModel.find({ isOperated: false })
-      .populate('user', 'tlgid')
+      .populate('user', 'tlgid name')
       .sort({ createdAt: -1 });
 
     return res.json({
@@ -1064,7 +1066,7 @@ app.get('/api/admin_get_deposit_rqst_one/:requestId', async (req, res) => {
   try {
     const { requestId } = req.params;
     const depositRequest = await DepositRqstModel.findById(requestId)
-      .populate('user', 'tlgid');
+      .populate('user', 'tlgid name username');
 
     if (!depositRequest) {
       return res.status(404).json({
@@ -1327,7 +1329,7 @@ app.get('/api/admin_get_changepassword_rqst', async (req, res) => {
       isOperated: false,
       status: 'new'
     })
-      .populate('user', 'tlgid')
+      .populate('user', 'tlgid name')
       .sort({ createdAt: -1 });
 
     return res.json({
@@ -1437,7 +1439,7 @@ app.get('/api/admin_get_changepassword_rqst_one/:requestId', async (req, res) =>
   try {
     const { requestId } = req.params;
     const request = await ChangePasswordRqstModel.findById(requestId)
-      .populate('user', 'tlgid');
+      .populate('user', 'tlgid name');
 
     if (!request) {
       return res.status(404).json({
