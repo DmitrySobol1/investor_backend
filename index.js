@@ -151,6 +151,28 @@ app.put('/api/user/:tlgid/name', async (req, res) => {
   }
 });
 
+// Обновить язык пользователя
+app.put('/api/user/:tlgid/language', async (req, res) => {
+  try {
+    const { tlgid } = req.params;
+    const { language } = req.body;
+
+    const user = await UserModel.findOneAndUpdate(
+      { tlgid },
+      { language },
+      { new: true }
+    );
+
+    if (!user) {
+      return res.status(404).json({ status: 'error', message: 'User not found' });
+    }
+
+    res.json({ status: 'success' });
+  } catch (error) {
+    res.status(500).json({ status: 'error', message: error.message });
+  }
+});
+
 // ==========================================
 // Прогресс пользователя
 
@@ -452,6 +474,7 @@ app.post('/api/enter', async (req, res) => {
     userData.result = 'showEnterPassword';
     userData.isFirstEnter = user.isFirstEnter
     console.log('showEnterPassword');
+    console.log('userData', userData)
     return res.json({ userData });
   } catch (err) {
     console.error('Enter error:', err);
