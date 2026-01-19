@@ -556,6 +556,11 @@ async function sendTelegramMessage(tlgid, typeMessage) {
     {
       chat_id: tlgid,
       text,
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: 'Открыть приложение', web_app: { url: process.env.APP_URL } }]
+        ]
+      }
     }
   );
 }
@@ -1268,9 +1273,9 @@ app.get('/api/get_user_deposits/:tlgid', async (req, res) => {
       });
     }
 
-    // Находим все депозиты пользователя, сортировка по дате создания (по возрастанию)
+    // Находим все депозиты пользователя, сортировка по дате окончания (по возрастанию)
     const deposits = await DepositModel.find({ user: user._id })
-      .sort({ createdAt: 1 })
+      .sort({ date_until: 1 })
       .lean();
 
     // Для каждого депозита вычисляем currentPortfolioValue
