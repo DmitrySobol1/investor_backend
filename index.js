@@ -1236,8 +1236,7 @@ app.post('/api/create_new_deposit', async (req, res) => {
     await DepositRqstModel.findByIdAndUpdate(requestId, { isOperated: true });
 
     
-    // TODO: вернуть 
-    // await sendTelegramMessage(userTlgid, 'user_deposit_created');
+    await sendTelegramMessage(userTlgid, 'user_deposit_created');
 
     return res.json({
       status: 'success',
