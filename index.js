@@ -1396,7 +1396,7 @@ app.get('/api/admin_get_all_users', async (req, res) => {
 // ===============================================
 app.get('/api/admin_get_all_questions', async (req, res) => {
   try {
-    const questions = await QuestionToSupportModel.find()
+    const questions = await QuestionToSupportModel.find({ isOperated: { $ne: true } })
       .populate('user', 'name tlgid')
       .sort({ createdAt: -1 })
       .lean();
