@@ -9,6 +9,10 @@ const QuestionToSupportSchema = new mongoose.Schema(
     question: {
       type: String,
     },
+    isOperated: {
+      type: Boolean,
+      default: false
+    }
        
     
   },

@@ -538,9 +538,9 @@ async function createNewUser_fromBot(tlgid, username, firstname, language) {
 // Отправка сообщения в Telegram бота
 // ===============================================
 const messageTemplates = {
-  payment: 'нажмите 👉/pay , что бы оплатить подписку',
   admin_new_deposit_rqst: 'Новая заявка на создание портфеля',
   admin_new_changepassword_rqst: 'Новый запрос на смену пароля',
+  admin_new_question: 'Пришло новое сообщение в разделе поддержка',
   user_deposit_created: 'Ваш портфель создан',
   user_password_reseted: 'Вы можете установить новый пароль'
 };
@@ -1392,6 +1392,69 @@ app.get('/api/admin_get_all_users', async (req, res) => {
 });
 
 // ===============================================
+// Админ: получить все вопросы в поддержку
+// ===============================================
+app.get('/api/admin_get_all_questions', async (req, res) => {
+  try {
+    const questions = await QuestionToSupportModel.find()
+      .populate('user', 'name tlgid')
+      .sort({ createdAt: -1 })
+      .lean();
+
+    return res.json({
+      status: 'success',
+      data: questions
+    });
+  } catch (err) {
+    console.error('Admin get all questions error:', err);
+    return res.status(500).json({
+      status: 'error',
+      message: 'Internal server error'
+    });
+  }
+});
+
+// ===============================================
+// Админ: пометить вопрос отвеченным
+// ===============================================
+app.post('/api/admin_mark_question_answered', async (req, res) => {
+  try {
+    const { questionId } = req.body;
+
+    if (!questionId) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'questionId is required'
+      });
+    }
+
+    const question = await QuestionToSupportModel.findByIdAndUpdate(
+      questionId,
+      { isOperated: true },
+      { new: true }
+    );
+
+    if (!question) {
+      return res.status(404).json({
+        status: 'error',
+        message: 'Question not found'
+      });
+    }
+
+    return res.json({
+      status: 'success',
+      message: 'Question marked as answered'
+    });
+  } catch (err) {
+    console.error('Admin mark question answered error:', err);
+    return res.status(500).json({
+      status: 'error',
+      message: 'Internal server error'
+    });
+  }
+});
+
+// ===============================================
 // Админ: получить заявки на смену пароля
 // ===============================================
 app.get('/api/admin_get_changepassword_rqst', async (req, res) => {
@@ -1606,6 +1669,9 @@ app.post('/api/new_request_to_support', async (req, res) => {
       user: user._id,
       question
     });
+
+    await sendTelegramMessage(process.env.ADMINTLG, 'admin_new_question' );
+
 
     return res.json({
       status: 'success',
