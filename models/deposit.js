@@ -38,6 +38,17 @@ const DepositSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
+    isRefunded: {
+      type: Boolean,
+      default: false
+    },
+    refundHistory: {
+      type: [{
+        date: { type: Date },
+        value: { type: Number }
+      }],
+      default: []
+    }
   },
   {
     timestamps: true,

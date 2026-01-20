@@ -38,6 +38,13 @@ const DepositOperationsSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    isRefundOperation : {
+      type: Boolean,
+      default: false
+    },
+    refund_value: {
+      type: Number      
+    }
   },
   {
     timestamps: true,

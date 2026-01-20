@@ -984,9 +984,15 @@ app.get('/api/admin_get_deposit_one/:depositId', async (req, res) => {
       ? filledOperations[filledOperations.length - 1].week_finish_amount
       : deposit.amountInEur;
 
+    // Сортируем refundHistory по дате (по возрастанию)
+    const depositData = deposit.toObject();
+    if (depositData.refundHistory && depositData.refundHistory.length > 0) {
+      depositData.refundHistory.sort((a, b) => new Date(a.date) - new Date(b.date));
+    }
+
     return res.json({
       status: 'success',
-      data: deposit,
+      data: depositData,
       operations: operations,
       currentPortfolioValue: currentPortfolioValue
     });
@@ -1124,6 +1130,105 @@ app.put('/api/admin_update_deposit_operation/:operationId', async (req, res) => 
     });
   } catch (err) {
     console.error('Admin update deposit operation error:', err);
+    return res.status(500).json({
+      status: 'error',
+      message: 'Internal server error'
+    });
+  }
+});
+
+// ===============================================
+// Админ: добавить пополнение в депозит
+// ===============================================
+app.post('/api/admin_add_refund/:depositId', async (req, res) => {
+  try {
+    const { depositId } = req.params;
+    const { value } = req.body;
+
+    if (!value || value <= 0) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Value is required and must be positive'
+      });
+    }
+
+    const deposit = await DepositModel.findById(depositId);
+
+    if (!deposit) {
+      return res.status(404).json({
+        status: 'error',
+        message: 'Deposit not found'
+      });
+    }
+
+    // 1. Находим последнюю операцию депозита
+    const lastOperation = await DepositOperationsModel.findOne({
+      deposit_link: depositId
+    }).sort({ createdAt: -1 });
+
+    if (lastOperation) {
+      // 2. Рассчитываем данные для новой операции
+      const nextWeekStart = new Date(lastOperation.week_date_finish);
+      nextWeekStart.setDate(nextWeekStart.getDate() + 1);
+      nextWeekStart.setHours(0, 0, 0, 0);
+
+      const nextWeekEnd = new Date(nextWeekStart);
+      nextWeekEnd.setDate(nextWeekStart.getDate() + 6);
+      nextWeekEnd.setHours(23, 59, 59, 999);
+
+      const newFinishAmount = lastOperation.week_finish_amount + value;
+      const nextWeekNumber = Math.ceil(lastOperation.number_of_week);
+
+      // 3. Создаём новую операцию
+      const newOperation = await DepositOperationsModel.create({
+        user_link: lastOperation.user_link,
+        deposit_link: lastOperation.deposit_link,
+        week_date_start: nextWeekStart,
+        week_date_finish: nextWeekEnd,
+        week_start_amount: newFinishAmount,
+        week_finish_amount: newFinishAmount,
+        number_of_week: nextWeekNumber,
+        profit_percent: 0,
+        isFilled: false,
+        isRefundOperation: false,
+        next_operation: null
+      });
+
+      // 4. Обновляем последнюю операцию
+      await DepositOperationsModel.findByIdAndUpdate(
+        lastOperation._id,
+        {
+          refund_value: value,
+          isRefundOperation: true,
+          week_finish_amount: newFinishAmount,
+          number_of_week: lastOperation.number_of_week - 0.1,
+          isFilled: true,
+          next_operation: newOperation._id
+        }
+      );
+    }
+
+    // 5. Обновляем Deposit (добавляем в refundHistory)
+    const updatedDeposit = await DepositModel.findByIdAndUpdate(
+      depositId,
+      {
+        isRefunded: true,
+        $push: {
+          refundHistory: {
+            date: new Date(),
+            value: value
+          }
+        }
+      },
+      { new: true }
+    );
+
+    return res.json({
+      status: 'success',
+      data: updatedDeposit
+    });
+  } catch (err) {
+    console.error('Admin add refund error:', err);
     return res.status(500).json({
       status: 'error',
       message: 'Internal server error'
