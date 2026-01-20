@@ -1386,19 +1386,35 @@ app.get('/api/get_user_deposits/:tlgid', async (req, res) => {
     // Для каждого депозита вычисляем currentPortfolioValue
     const depositsWithPortfolioValue = await Promise.all(
       deposits.map(async (deposit) => {
-        // Находим последнюю заполненную операцию по данному депозиту
-        const lastFilledOperation = await DepositOperationsModel.findOne({
+        // totalInitialPrice = начальная цена + пополнения
+        const refundSum = deposit.refundHistory?.reduce((sum, item) => sum + item.value, 0) || 0;
+        const totalInitialPrice = deposit.amountInEur + refundSum;
+
+        // Получаем все заполненные операции
+        const operations = await DepositOperationsModel.find({
           deposit_link: deposit._id,
           isFilled: true
-        }).sort({ number_of_week: -1 });
+        });
 
-        const currentPortfolioValue = lastFilledOperation
-          ? lastFilledOperation.week_finish_amount
-          : deposit.amountInEur;
+        // profitSum = сумма прибылей от не-refund операций
+        const profitSum = operations
+          .filter(op => !op.isRefundOperation)
+          .reduce((sum, op) => sum + (op.week_finish_amount - op.week_start_amount), 0);
+
+        const currentPortfolioValue = totalInitialPrice + profitSum;
+
+        // Расчёт прибыли
+        const profitEur = currentPortfolioValue - totalInitialPrice;
+        const profitPercent = totalInitialPrice > 0
+          ? ((currentPortfolioValue - totalInitialPrice) / totalInitialPrice) * 100
+          : 0;
 
         return {
           ...deposit,
-          currentPortfolioValue
+          currentPortfolioValue,
+          totalInitialPrice,
+          profitEur,
+          profitPercent
         };
       })
     );
@@ -1438,20 +1454,37 @@ app.get('/api/get_deposit_one/:depositId', async (req, res) => {
       isFilled: true
     }).sort({ number_of_week: 1 });
 
-    // Берём последнюю для currentPortfolioValue
-    const lastFilledOperation = operations.length > 0
-      ? operations[operations.length - 1]
-      : null;
+    // totalInitialPrice = начальная цена + пополнения
+    const refundSum = deposit.refundHistory?.reduce((sum, item) => sum + item.value, 0) || 0;
+    const totalInitialPrice = deposit.amountInEur + refundSum;
 
-    const currentPortfolioValue = lastFilledOperation
-      ? lastFilledOperation.week_finish_amount
-      : deposit.amountInEur;
+    // profitSum = сумма прибылей от не-refund операций
+    const profitSum = operations
+      .filter(op => !op.isRefundOperation)
+      .reduce((sum, op) => sum + (op.week_finish_amount - op.week_start_amount), 0);
+
+    const currentPortfolioValue = totalInitialPrice + profitSum;
+
+    // Расчёт прибыли
+    const profitEur = currentPortfolioValue - totalInitialPrice;
+    const profitPercent = totalInitialPrice > 0
+      ? ((currentPortfolioValue - totalInitialPrice) / totalInitialPrice) * 100
+      : 0;
+
+    // Сортируем refundHistory по дате (по возрастанию)
+    const depositData = deposit.toObject();
+    if (depositData.refundHistory && depositData.refundHistory.length > 0) {
+      depositData.refundHistory.sort((a, b) => new Date(a.date) - new Date(b.date));
+    }
 
     return res.json({
       status: 'success',
-      data: deposit,
+      data: depositData,
       operations,
-      currentPortfolioValue
+      currentPortfolioValue,
+      totalInitialPrice,
+      profitEur,
+      profitPercent
     });
   } catch (err) {
     console.error('Get deposit one error:', err);
