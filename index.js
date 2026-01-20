@@ -1362,6 +1362,35 @@ app.post('/api/create_new_deposit', async (req, res) => {
 });
 
 // ===============================================
+// Админ: отклонить заявку на депозит
+// ===============================================
+app.post('/api/admin_reject_deposit_rqst/:requestId', async (req, res) => {
+  try {
+    const { requestId } = req.params;
+
+    const depositRequest = await DepositRqstModel.findById(requestId);
+    if (!depositRequest) {
+      return res.status(404).json({
+        status: 'error',
+        message: 'Deposit request not found'
+      });
+    }
+
+    await DepositRqstModel.findByIdAndUpdate(requestId, { isOperated: true });
+
+    return res.json({
+      status: 'success'
+    });
+  } catch (err) {
+    console.error('Reject deposit request error:', err);
+    return res.status(500).json({
+      status: 'error',
+      message: 'Internal server error'
+    });
+  }
+});
+
+// ===============================================
 // Получить депозиты пользователя по tlgid
 // ===============================================
 app.get('/api/get_user_deposits/:tlgid', async (req, res) => {
