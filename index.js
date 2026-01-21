@@ -16,6 +16,7 @@ import QuestionToSupportModel from './models/questionToSupport.js'
 import BitcoinPriceModel from './models/bitcoinPrice.js'
 import DepositOperationsModel from './models/deposit_operations.js'
 import CryptoRateModel from './models/cryptoRate.js'
+import DepositProlongationModel from './models/deposit_prolongation.js'
 
 const app = express();
 const PORT = process.env.PORT || 4444;
@@ -541,6 +542,7 @@ const messageTemplates = {
   admin_new_deposit_rqst: 'Новая заявка на создание портфеля',
   admin_new_changepassword_rqst: 'Новый запрос на смену пароля',
   admin_new_question: 'Пришло новое сообщение в разделе поддержка',
+  admin_new_prolongation_rqst: 'Новая заявка на продление',
   user_deposit_created: 'Ваш портфель создан',
   user_password_reseted: 'Вы можете установить новый пароль'
 };
@@ -1517,6 +1519,62 @@ app.get('/api/get_deposit_one/:depositId', async (req, res) => {
     });
   } catch (err) {
     console.error('Get deposit one error:', err);
+    return res.status(500).json({
+      status: 'error',
+      message: 'Internal server error'
+    });
+  }
+});
+
+// ===============================================
+// Действие для продления портфеля
+// ===============================================
+app.post('/api/deposit_prolong_action', async (req, res) => {
+  try {
+    const { depositId, actionToProlong, valute, cryptoCashCurrency, amount } = req.body;
+
+    // Нормализация суммы: замена запятой на точку
+    const normalizedAmount = typeof amount === 'string'
+      ? parseFloat(amount.replace(',', '.'))
+      : amount;
+
+    // Находим deposit
+    const deposit = await DepositModel.findById(depositId);
+
+    if (!deposit) {
+      return res.status(404).json({
+        status: 'error',
+        message: 'Deposit not found'
+      });
+    }
+
+    // Создаём запись в DepositProlongation
+    const prolongation = new DepositProlongationModel({
+      user: deposit.user,
+      linkToDeposit: depositId,
+      actionToProlong,
+      valute,
+      cryptoCashCurrency,
+      amount: normalizedAmount,
+      isOperated: false
+    });
+
+    await prolongation.save();
+
+    // Обновляем deposit с ссылкой на prolongation
+    await DepositModel.findByIdAndUpdate(depositId, {
+      isMadeActionToProlong: true,
+      linkToDepositProlongation: prolongation._id
+    });
+
+    await sendTelegramMessage(process.env.ADMINTLG, 'admin_new_prolongation_rqst');
+
+    return res.json({
+      status: 'success',
+      data: prolongation
+    });
+  } catch (err) {
+    console.error('Deposit prolong action error:', err);
     return res.status(500).json({
       status: 'error',
       message: 'Internal server error'

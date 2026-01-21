@@ -48,7 +48,22 @@ const DepositSchema = new mongoose.Schema(
         value: { type: Number }
       }],
       default: []
+    },
+    isTimeToProlong: {
+      type: Boolean,
+      default: false
+    },
+    // когда пользователь выбрал действие, для продления портфеля (или отмены продления)
+    isMadeActionToProlong: {
+      type: Boolean,
+      default: false
+    },
+    linkToDepositProlongation: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'DepositProlongation',
+      default: null
     }
+    
   },
   {
     timestamps: true,
