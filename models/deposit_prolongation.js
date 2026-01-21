@@ -8,7 +8,7 @@ const DepositProlongationSchema = new mongoose.Schema(
     },
     linkToDeposit: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: 'DepositRqst',
+      ref: 'Deposit',
     },
     // действие для продления, которое выбрал
     actionToProlong: {

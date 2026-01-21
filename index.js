@@ -542,7 +542,7 @@ const messageTemplates = {
   admin_new_deposit_rqst: 'Новая заявка на создание портфеля',
   admin_new_changepassword_rqst: 'Новый запрос на смену пароля',
   admin_new_question: 'Пришло новое сообщение в разделе поддержка',
-  admin_new_prolongation_rqst: 'Новая заявка на продление',
+  admin_new_prolongation_rqst: 'Новая заявка на продление/выплату',
   user_deposit_created: 'Ваш портфель создан',
   user_password_reseted: 'Вы можете установить новый пароль'
 };
@@ -1575,6 +1575,227 @@ app.post('/api/deposit_prolong_action', async (req, res) => {
     });
   } catch (err) {
     console.error('Deposit prolong action error:', err);
+    return res.status(500).json({
+      status: 'error',
+      message: 'Internal server error'
+    });
+  }
+});
+
+// ===============================================
+// Админ: получить заявки на продление/выплату
+// ===============================================
+app.get('/api/admin_get_deposit_prolongation', async (req, res) => {
+  try {
+    const prolongationRequests = await DepositProlongationModel.find({ isOperated: false })
+      .populate('user', 'tlgid name username')
+      .populate('linkToDeposit')
+      .sort({ createdAt: -1 });
+
+    return res.json({
+      status: 'success',
+      data: prolongationRequests
+    });
+  } catch (err) {
+    console.error('Admin get deposit prolongation requests error:', err);
+    return res.status(500).json({
+      status: 'error',
+      message: 'Internal server error'
+    });
+  }
+});
+
+// ===============================================
+// Админ: получить одну заявку на продление по ID
+// ===============================================
+app.get('/api/admin_get_deposit_prolongation_one/:prolongationId', async (req, res) => {
+  try {
+    const { prolongationId } = req.params;
+    const prolongation = await DepositProlongationModel.findById(prolongationId)
+      .populate('user', 'tlgid name username')
+      .populate('linkToDeposit');
+
+    if (!prolongation) {
+      return res.status(404).json({
+        status: 'error',
+        message: 'Prolongation request not found'
+      });
+    }
+
+    // Получаем данные портфеля и операции
+    let currentPortfolioValue = null;
+    let totalInitialPrice = 0;
+    let profitEur = 0;
+    let profitPercent = 0;
+    let operations = [];
+
+    if (prolongation.linkToDeposit) {
+      operations = await DepositOperationsModel.find({
+        deposit_link: prolongation.linkToDeposit._id,
+        isFilled: true
+      }).sort({ number_of_week: 1 });
+
+      const deposit = prolongation.linkToDeposit;
+      const refundSum = deposit.refundHistory?.reduce((sum, item) => sum + item.value, 0) || 0;
+      totalInitialPrice = deposit.amountInEur + refundSum;
+
+      const profitSum = operations
+        .filter(op => !op.isRefundOperation)
+        .reduce((sum, op) => sum + (op.week_finish_amount - op.week_start_amount), 0);
+
+      currentPortfolioValue = totalInitialPrice + profitSum;
+      profitEur = profitSum;
+      profitPercent = totalInitialPrice > 0 ? (profitSum / totalInitialPrice) * 100 : 0;
+    }
+
+    return res.json({
+      status: 'success',
+      data: prolongation,
+      operations,
+      currentPortfolioValue,
+      totalInitialPrice,
+      profitEur,
+      profitPercent
+    });
+  } catch (err) {
+    console.error('Admin get deposit prolongation one error:', err);
+    return res.status(500).json({
+      status: 'error',
+      message: 'Internal server error'
+    });
+  }
+});
+
+// ===============================================
+// Админ: пометить заявку на продление как выполненную
+// ===============================================
+app.post('/api/admin_mark_prolongation_operated', async (req, res) => {
+  try {
+    const { prolongationId, finalAmount } = req.body;
+
+    if (!prolongationId) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'prolongationId is required'
+      });
+    }
+
+    // Сначала получаем prolongation для проверки типа действия
+    const prolongation = await DepositProlongationModel.findById(prolongationId);
+
+    if (!prolongation) {
+      return res.status(404).json({
+        status: 'error',
+        message: 'Prolongation request not found'
+      });
+    }
+
+    // Помечаем prolongation как обработанную
+    await DepositProlongationModel.findByIdAndUpdate(
+      prolongationId,
+      { isOperated: true }
+    );
+
+    let resultMessage = 'Заявка обработана';
+
+    // Обработка в зависимости от типа действия
+    if (prolongation.actionToProlong === 'get_all_sum') {
+      // Закрываем депозит (портфель)
+      await DepositModel.findByIdAndUpdate(
+        prolongation.linkToDeposit,
+        { isActive: false }
+      );
+      resultMessage = 'Сумма выплачена, портфель закрыт';
+    }
+
+    // Обработка частичного вывода
+    if (prolongation.actionToProlong === 'get_part_sum') {
+      const withdrawAmount = parseFloat(String(finalAmount).replace(',', '.'));
+
+      // 1. Обновить Deposit: добавить в refundHistory, isRefunded=true, date_until += 365
+      const deposit = await DepositModel.findById(prolongation.linkToDeposit);
+      const newDateUntil = new Date(deposit.date_until);
+      newDateUntil.setDate(newDateUntil.getDate() + 365);
+
+      await DepositModel.findByIdAndUpdate(prolongation.linkToDeposit, {
+        isRefunded: true,
+        isTimeToProlong: false,
+        isMadeActionToProlong: false,
+        date_until: newDateUntil,
+        $push: {
+          refundHistory: {
+            date: new Date(),
+            value: -withdrawAmount
+          }
+        }
+      });
+
+      // 2. Найти последнюю операцию по депозиту
+      const lastOperation = await DepositOperationsModel.findOne({
+        deposit_link: prolongation.linkToDeposit
+      }).sort({ createdAt: -1 });
+
+      // 3. Рассчитать даты для новой операции
+      const nextWeekStart = new Date(lastOperation.week_date_finish);
+      nextWeekStart.setDate(nextWeekStart.getDate() + 1);
+      nextWeekStart.setHours(0, 0, 0, 0);
+
+      const nextWeekEnd = new Date(nextWeekStart);
+      nextWeekEnd.setDate(nextWeekStart.getDate() + 6);
+      nextWeekEnd.setHours(23, 59, 59, 999);
+
+      const newFinishAmount = lastOperation.week_finish_amount - withdrawAmount;
+      const nextWeekNumber = Math.ceil(lastOperation.number_of_week - 0.1) + 1;
+
+      // 4. Создать новую операцию
+      const newOperation = await DepositOperationsModel.create({
+        user_link: lastOperation.user_link,
+        deposit_link: lastOperation.deposit_link,
+        week_date_start: nextWeekStart,
+        week_date_finish: nextWeekEnd,
+        week_start_amount: newFinishAmount,
+        week_finish_amount: newFinishAmount,
+        number_of_week: nextWeekNumber,
+        profit_percent: 0,
+        isFilled: false,
+        isRefundOperation: false
+      });
+
+      // 5. Обновить последнюю операцию
+      await DepositOperationsModel.findByIdAndUpdate(lastOperation._id, {
+        week_finish_amount: newFinishAmount,
+        number_of_week: lastOperation.number_of_week - 0.1,
+        isFilled: true,
+        isRefundOperation: true,
+        refund_value: -withdrawAmount,
+        next_operation: newOperation._id
+      });
+
+      resultMessage = 'Выплата совершена, портфель продлен';
+    }
+
+    // Обработка реинвестирования всей суммы
+    if (prolongation.actionToProlong === 'reinvest_all') {
+      const deposit = await DepositModel.findById(prolongation.linkToDeposit);
+      const newDateUntil = new Date(deposit.date_until);
+      newDateUntil.setDate(newDateUntil.getDate() + 365);
+
+      await DepositModel.findByIdAndUpdate(prolongation.linkToDeposit, {
+        isTimeToProlong: false,
+        isMadeActionToProlong: false,
+        date_until: newDateUntil
+      });
+
+      resultMessage = 'Портфель продлен';
+    }
+
+    return res.json({
+      status: 'success',
+      message: resultMessage,
+      actionType: prolongation.actionToProlong
+    });
+  } catch (err) {
+    console.error('Admin mark prolongation operated error:', err);
     return res.status(500).json({
       status: 'error',
       message: 'Internal server error'
