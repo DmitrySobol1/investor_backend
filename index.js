@@ -539,16 +539,41 @@ async function createNewUser_fromBot(tlgid, username, firstname, language) {
 // Отправка сообщения в Telegram бота
 // ===============================================
 const messageTemplates = {
-  admin_new_deposit_rqst: 'Новая заявка на создание портфеля',
-  admin_new_changepassword_rqst: 'Новый запрос на смену пароля',
-  admin_new_question: 'Пришло новое сообщение в разделе поддержка',
-  admin_new_prolongation_rqst: 'Новая заявка на продление/выплату',
-  user_deposit_created: 'Ваш портфель создан',
-  user_password_reseted: 'Вы можете установить новый пароль'
+  ru: {
+    admin_new_deposit_rqst: 'Новая заявка на создание портфеля',
+    admin_new_changepassword_rqst: 'Новый запрос на смену пароля',
+    admin_new_question: 'Пришло новое сообщение в разделе поддержка',
+    admin_new_prolongation_rqst: 'Новая заявка на продление/выплату',
+    user_deposit_created: 'Ваш портфель создан',
+    user_password_reseted: 'Вы можете установить новый пароль',
+    user_deposit_get_all_sum: 'Ваш портфель закрыт',
+    user_deposit_get_part_sum: 'Для вас создан новый портфель',
+    user_deposit_reinvest_all: 'Ваш портфель продлен',
+    open_app: 'Открыть приложение'
+  },
+  de: {
+    admin_new_deposit_rqst: 'Neuer Antrag auf Portfolio-Erstellung',
+    admin_new_changepassword_rqst: 'Neue Anfrage zur Passwortänderung',
+    admin_new_question: 'Neue Nachricht im Support-Bereich',
+    admin_new_prolongation_rqst: 'Neuer Antrag auf Verlängerung/Auszahlung',
+    user_deposit_created: 'Ihr Portfolio wurde erstellt',
+    user_password_reseted: 'Sie können jetzt ein neues Passwort festlegen',
+    user_deposit_get_all_sum: 'Ihr Portfolio wurde geschlossen',
+    user_deposit_get_part_sum: 'Ein neues Portfolio wurde für Sie erstellt',
+    user_deposit_reinvest_all: 'Ihr Portfolio wurde verlängert',
+    open_app: 'App öffnen'
+  }
 };
 
 async function sendTelegramMessage(tlgid, typeMessage) {
-  const text = messageTemplates[typeMessage];
+  // Получаем язык пользователя из БД
+  const user = await UserModel.findOne({ tlgid });
+  const language = user?.language || 'de';
+
+  const templates = messageTemplates[language] || messageTemplates.de;
+  const text = templates[typeMessage];
+  const openAppText = templates.open_app;
+
   if (!text) {
     throw new Error(`Unknown message type: ${typeMessage}`);
   }
@@ -560,7 +585,7 @@ async function sendTelegramMessage(tlgid, typeMessage) {
       text,
       reply_markup: {
         inline_keyboard: [
-          [{ text: 'Открыть приложение', web_app: { url: process.env.APP_URL } }]
+          [{ text: openAppText, web_app: { url: process.env.APP_URL } }]
         ]
       }
     }
@@ -1705,73 +1730,83 @@ app.post('/api/admin_mark_prolongation_operated', async (req, res) => {
         prolongation.linkToDeposit,
         { isActive: false }
       );
+
+      // Отправить уведомление пользователю
+      await sendTelegramMessage(oldDeposit.user.tlgid, 'user_deposit_get_all_sum');
+
       resultMessage = 'Сумма выплачена, портфель закрыт';
     }
 
-    // Обработка частичного вывода
+    // Обработка частичного вывода - закрыть старый депозит, создать новый
     if (prolongation.actionToProlong === 'get_part_sum') {
       const withdrawAmount = parseFloat(String(finalAmount).replace(',', '.'));
 
-      // 1. Обновить Deposit: добавить в refundHistory, isRefunded=true, date_until += 365
-      const deposit = await DepositModel.findById(prolongation.linkToDeposit);
-      const newDateUntil = new Date(deposit.date_until);
-      newDateUntil.setDate(newDateUntil.getDate() + 365);
+      // 1. Получить старый депозит с populate user
+      const oldDeposit = await DepositModel.findById(prolongation.linkToDeposit).populate('user');
 
-      await DepositModel.findByIdAndUpdate(prolongation.linkToDeposit, {
-        isRefunded: true,
-        isTimeToProlong: false,
-        isMadeActionToProlong: false,
-        date_until: newDateUntil,
-        $push: {
-          refundHistory: {
-            date: new Date(),
-            value: -withdrawAmount
-          }
-        }
-      });
-
-      // 2. Найти последнюю операцию по депозиту
+      // 2. Получить текущую стоимость портфеля (последняя операция)
       const lastOperation = await DepositOperationsModel.findOne({
         deposit_link: prolongation.linkToDeposit
       }).sort({ createdAt: -1 });
 
-      // 3. Рассчитать даты для новой операции
-      const nextWeekStart = new Date(lastOperation.week_date_finish);
-      nextWeekStart.setDate(nextWeekStart.getDate() + 1);
-      nextWeekStart.setHours(0, 0, 0, 0);
+      const currentPortfolioValue = lastOperation.week_finish_amount;
+      const newAmountInEur = currentPortfolioValue - withdrawAmount;
 
-      const nextWeekEnd = new Date(nextWeekStart);
-      nextWeekEnd.setDate(nextWeekStart.getDate() + 6);
-      nextWeekEnd.setHours(23, 59, 59, 999);
+      // 3. Закрыть старый депозит
+      await DepositModel.findByIdAndUpdate(prolongation.linkToDeposit, {
+        isActive: false
+      });
 
-      const newFinishAmount = lastOperation.week_finish_amount - withdrawAmount;
-      const nextWeekNumber = Math.ceil(lastOperation.number_of_week - 0.1) + 1;
+      // 4. Рассчитать date_until для нового депозита (+365 дней от старого)
+      const newDateUntil = new Date(oldDeposit.date_until);
+      newDateUntil.setDate(newDateUntil.getDate() + 365);
 
-      // 4. Создать новую операцию
-      const newOperation = await DepositOperationsModel.create({
-        user_link: lastOperation.user_link,
-        deposit_link: lastOperation.deposit_link,
-        week_date_start: nextWeekStart,
-        week_date_finish: nextWeekEnd,
-        week_start_amount: newFinishAmount,
-        week_finish_amount: newFinishAmount,
-        number_of_week: nextWeekNumber,
+      // 5. Создать новый депозит
+      const newDeposit = await DepositModel.create({
+        user: oldDeposit.user._id,
+        depositRequest: oldDeposit.depositRequest,
+        valute: 'cash',
+        cryptoCashCurrency: 'EUR',
+        amount: newAmountInEur,
+        amountInEur: newAmountInEur,
+        exchangeRate: 1,
+        period: oldDeposit.period,
+        date_until: newDateUntil,
+        riskPercent: oldDeposit.riskPercent,
+        isActive: true
+      });
+
+      // 6. Создать первую DepositOperation для нового депозита
+      const today = new Date();
+
+      // Номер текущей недели в году
+      const startOfYear = new Date(today.getFullYear(), 0, 1);
+      const days = Math.floor((today.getTime() - startOfYear.getTime()) / (24 * 60 * 60 * 1000));
+      const numberOfWeek = Math.ceil((days + startOfYear.getDay() + 1) / 7);
+
+      // Дата окончания текущей недели (воскресенье)
+      const dayOfWeek = today.getDay();
+      const diffToSunday = dayOfWeek === 0 ? 0 : 7 - dayOfWeek;
+      const weekEnd = new Date(today);
+      weekEnd.setDate(today.getDate() + diffToSunday);
+      weekEnd.setHours(23, 59, 59, 999);
+
+      await DepositOperationsModel.create({
+        user_link: oldDeposit.user._id,
+        deposit_link: newDeposit._id,
+        week_date_start: today,
+        week_date_finish: weekEnd,
+        week_start_amount: newAmountInEur,
+        week_finish_amount: newAmountInEur,
+        number_of_week: numberOfWeek,
         profit_percent: 0,
-        isFilled: false,
-        isRefundOperation: false
+        isFilled: false
       });
 
-      // 5. Обновить последнюю операцию
-      await DepositOperationsModel.findByIdAndUpdate(lastOperation._id, {
-        week_finish_amount: newFinishAmount,
-        number_of_week: lastOperation.number_of_week - 0.1,
-        isFilled: true,
-        isRefundOperation: true,
-        refund_value: -withdrawAmount,
-        next_operation: newOperation._id
-      });
+      // 7. Отправить уведомление пользователю
+      await sendTelegramMessage(oldDeposit.user.tlgid, 'user_deposit_get_part_sum');
 
-      resultMessage = 'Выплата совершена, портфель продлен';
+      resultMessage = 'Выплата совершена, новый портфель создан';
     }
 
     // Обработка реинвестирования всей суммы
@@ -1785,6 +1820,8 @@ app.post('/api/admin_mark_prolongation_operated', async (req, res) => {
         isMadeActionToProlong: false,
         date_until: newDateUntil
       });
+
+       await sendTelegramMessage(oldDeposit.user.tlgid, 'user_deposit_reinvest_all');
 
       resultMessage = 'Портфель продлен';
     }
@@ -1813,12 +1850,11 @@ app.get('/api/admin_get_all_users', async (req, res) => {
       .sort({ createdAt: -1 })
       .lean();
 
-    // Получаем активные депозиты для каждого пользователя
+    // Получаем все депозиты для каждого пользователя
     const usersWithDeposits = await Promise.all(
       users.map(async (user) => {
         const deposits = await DepositModel.find({
-          user: user._id,
-          isActive: true
+          user: user._id
         }).lean();
         return { ...user, deposits };
       })
