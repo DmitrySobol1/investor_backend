@@ -1005,11 +1005,17 @@ app.get('/api/admin_get_deposit_one/:depositId', async (req, res) => {
     const operations = await DepositOperationsModel.find({ deposit_link: depositId })
       .sort({ number_of_week: 1 });
 
-    // Рассчитываем текущую стоимость портфеля (последний week_finish_amount где isFilled = true)
+    // totalInitialPrice = начальная цена + пополнения
+    const refundSum = deposit.refundHistory?.reduce((sum, item) => sum + item.value, 0) || 0;
+    const totalInitialPrice = deposit.amountInEur + refundSum;
+
+    // profitSum = сумма прибылей от не-refund операций
     const filledOperations = operations.filter(op => op.isFilled);
-    const currentPortfolioValue = filledOperations.length > 0
-      ? filledOperations[filledOperations.length - 1].week_finish_amount
-      : deposit.amountInEur;
+    const profitSum = filledOperations
+      .filter(op => !op.isRefundOperation)
+      .reduce((sum, op) => sum + (op.week_finish_amount - op.week_start_amount), 0);
+
+    const currentPortfolioValue = totalInitialPrice + profitSum;
 
     // Сортируем refundHistory по дате (по возрастанию)
     const depositData = deposit.toObject();
@@ -1021,7 +1027,8 @@ app.get('/api/admin_get_deposit_one/:depositId', async (req, res) => {
       status: 'success',
       data: depositData,
       operations: operations,
-      currentPortfolioValue: currentPortfolioValue
+      currentPortfolioValue,
+      totalInitialPrice
     });
   } catch (err) {
     console.error('Admin get deposit one error:', err);
