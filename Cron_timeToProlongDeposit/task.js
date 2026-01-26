@@ -30,19 +30,9 @@ import { sendTelegramMessage } from '../utils/telegram.js';
 
 // Подключаемся к БД и только потом выполняем проверку
 mongoose
-  .connect(process.env.DATABASE_URL)
-  .then(async () => {
-    console.log('DB OK');
-    await checkDepositsForProlong();
-    await mongoose.connection.close();
-    console.log('DB connection closed');
-    process.exit(0);
-  })
-  .catch((err) => {
-    console.log('db error:', err);
-    process.exit(1);
-  });
-
+    .connect(process.env.DATABASE_URL)
+    .then(() => console.log('DB OK'))
+    .catch((err) => console.log('db error:', err));
 
 
 
