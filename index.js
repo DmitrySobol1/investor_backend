@@ -2179,114 +2179,111 @@ app.post('/api/new_request_to_support', async (req, res) => {
 // запрос курса
 // ******************************
 
-app.get('/api/btc', async (req, res) => {
-  const date = '17-01-2025';
-  const price = await getBitcoinPrice(date, 'usd');
+// app.get('/api/btc', async (req, res) => {
+//   const date = '17-01-2025';
+//   const price = await getBitcoinPrice(date, 'usd');
 
-
-
-
-  res.json({
-    price,
-  });
-});
+//   res.json({
+//     price,
+//   });
+// });
 
 
 // Курс на конкретную дату (формат: DD-MM-YYYY)
-async function getBitcoinPrice(date, currency = 'usd') {
-  const res = await fetch(`https://api.coingecko.com/api/v3/coins/bitcoin/history?date=${date}`);
-  const data = await res.json();
-  return data.market_data?.current_price?.[currency] || null;
-}
+// async function getBitcoinPrice(date, currency = 'usd') {
+//   const res = await fetch(`https://api.coingecko.com/api/v3/coins/bitcoin/history?date=${date}`);
+//   const data = await res.json();
+//   return data.market_data?.current_price?.[currency] || null;
+// }
 
 // Получить курсы биткоина за диапазон дат и сохранить в БД
-async function fetchAndSaveBitcoinPrices(startDate, endDate) {
-  const parseDate = (str) => {
-    const [day, month, year] = str.split('-').map(Number);
-    return new Date(year, month - 1, day);
-  };
+// async function fetchAndSaveBitcoinPrices(startDate, endDate) {
+//   const parseDate = (str) => {
+//     const [day, month, year] = str.split('-').map(Number);
+//     return new Date(year, month - 1, day);
+//   };
 
-  const formatDate = (date) => {
-    const day = String(date.getDate()).padStart(2, '0');
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const year = date.getFullYear();
-    return `${day}-${month}-${year}`;
-  };
+//   const formatDate = (date) => {
+//     const day = String(date.getDate()).padStart(2, '0');
+//     const month = String(date.getMonth() + 1).padStart(2, '0');
+//     const year = date.getFullYear();
+//     return `${day}-${month}-${year}`;
+//   };
 
-  const start = parseDate(startDate);
-  const end = parseDate(endDate);
-  const results = [];
+//   const start = parseDate(startDate);
+//   const end = parseDate(endDate);
+//   const results = [];
 
-  for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-    const dateStr = formatDate(d);
+//   for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+//     const dateStr = formatDate(d);
 
-    // Проверяем, есть ли уже запись с данными
-    const existing = await BitcoinPriceModel.findOne({ date: dateStr });
-    if (existing && existing.priceUsd !== null && existing.priceEur !== null) {
-      console.log(`${dateStr} уже есть в БД`);
-      results.push(existing);
-      continue;
-    }
+//     // Проверяем, есть ли уже запись с данными
+//     const existing = await BitcoinPriceModel.findOne({ date: dateStr });
+//     if (existing && existing.priceUsd !== null && existing.priceEur !== null) {
+//       console.log(`${dateStr} уже есть в БД`);
+//       results.push(existing);
+//       continue;
+//     }
 
-    try {
-      const priceUsd = await getBitcoinPrice(dateStr, 'usd');
-      const priceEur = await getBitcoinPrice(dateStr, 'eur');
+//     try {
+//       const priceUsd = await getBitcoinPrice(dateStr, 'usd');
+//       const priceEur = await getBitcoinPrice(dateStr, 'eur');
 
-      let saved;
-      if (existing) {
-        // Перезаписываем запись с null значениями
-        existing.priceUsd = priceUsd;
-        existing.priceEur = priceEur;
-        saved = await existing.save();
-        console.log(`Обновлено: ${dateStr} - USD: ${priceUsd}, EUR: ${priceEur}`);
-      } else {
-        saved = await BitcoinPriceModel.create({
-          date: dateStr,
-          priceUsd,
-          priceEur,
-        });
-        console.log(`Сохранено: ${dateStr} - USD: ${priceUsd}, EUR: ${priceEur}`);
-      }
+//       let saved;
+//       if (existing) {
+//         // Перезаписываем запись с null значениями
+//         existing.priceUsd = priceUsd;
+//         existing.priceEur = priceEur;
+//         saved = await existing.save();
+//         console.log(`Обновлено: ${dateStr} - USD: ${priceUsd}, EUR: ${priceEur}`);
+//       } else {
+//         saved = await BitcoinPriceModel.create({
+//           date: dateStr,
+//           priceUsd,
+//           priceEur,
+//         });
+//         console.log(`Сохранено: ${dateStr} - USD: ${priceUsd}, EUR: ${priceEur}`);
+//       }
 
-      results.push(saved);
+//       results.push(saved);
 
-      // Задержка 1.5 сек, чтобы не превысить лимит API
-      await new Promise(resolve => setTimeout(resolve, 5000));
-    } catch (err) {
-      console.error(`Ошибка для ${dateStr}:`, err.message);
-    }
-  }
+//       // Задержка 1.5 сек, чтобы не превысить лимит API
+//       await new Promise(resolve => setTimeout(resolve, 5000));
+//     } catch (err) {
+//       console.error(`Ошибка для ${dateStr}:`, err.message);
+//     }
+//   }
 
-  return results;
-}
+//   return results;
+// }
 
 // Эндпоинт для запуска загрузки курсов (CoinGecko)
-app.post('/api/fetch_bitcoin_prices', async (req, res) => {
-  try {
-    const { startDate, endDate } = req.body;
+// app.post('/api/fetch_bitcoin_prices', async (req, res) => {
+//   try {
+//     const { startDate, endDate } = req.body;
 
-    if (!startDate || !endDate) {
-      return res.status(400).json({
-        status: 'error',
-        message: 'startDate and endDate are required (format: DD-MM-YYYY)'
-      });
-    }
+//     if (!startDate || !endDate) {
+//       return res.status(400).json({
+//         status: 'error',
+//         message: 'startDate and endDate are required (format: DD-MM-YYYY)'
+//       });
+//     }
 
-    const results = await fetchAndSaveBitcoinPrices(startDate, endDate);
+//     const results = await fetchAndSaveBitcoinPrices(startDate, endDate);
 
-    res.json({
-      status: 'success',
-      message: `Загружено ${results.length} записей`,
-      data: results
-    });
-  } catch (err) {
-    console.error('Ошибка при загрузке курсов:', err);
-    res.status(500).json({
-      status: 'error',
-      message: err.message
-    });
-  }
-});
+//     res.json({
+//       status: 'success',
+//       message: `Загружено ${results.length} записей`,
+//       data: results
+//     });
+//   } catch (err) {
+//     console.error('Ошибка при загрузке курсов:', err);
+//     res.status(500).json({
+//       status: 'error',
+//       message: err.message
+//     });
+//   }
+// });
 
 // ******************************
 // Binance API
@@ -2304,7 +2301,7 @@ async function getBitcoinPriceBinance(dateStr) {
   const url = `https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1d&startTime=${startTime}&endTime=${endTime}&limit=1`;
 
   const res = await fetch(url);
-  const data = await res.json();
+  const data = await res.json(); 
 
   if (data && data.length > 0) {
     // [0] open time, [1] open, [2] high, [3] low, [4] close, ...
@@ -2476,6 +2473,30 @@ app.post('/api/update_crypto_rate', async (req, res) => {
 });
 
 
+
+// ==========================================
+// получение депозитов по until_date
+// ==========================================
+
+app.get('/api/admin_get_deposits_by_date', async (req, res) => {
+  try {
+    const deposits = await DepositModel.find()
+      .populate('user', 'tlgid name username')
+      .sort({ date_until: 1 })
+      .lean();
+
+    return res.json({
+      status: 'success',
+      data: deposits
+    });
+  } catch (err) {
+    console.error('Get deposits by date error:', err);
+    return res.status(500).json({
+      status: 'error',
+      message: 'Internal server error'
+    });
+  }
+});
 
 // 404 handler
 app.use((req, res) => {
