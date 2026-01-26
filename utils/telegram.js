@@ -3,10 +3,16 @@ import UserModel from '../models/user.js';
 
 export const messageTemplates = {
   ru: {
-    admin_new_deposit_rqst: 'Новая заявка на создание портфеля',
+    admin_new_deposit_rqst: ({ amount, currency, name, username }) =>
+      `Новая заявка на создание портфеля\n\nсумма: ${amount} ${currency}\nпользователь: ${name}\nusername: ${username || 'no username'}`,
     admin_new_changepassword_rqst: 'Новый запрос на смену пароля',
     admin_new_question: 'Пришло новое сообщение в разделе поддержка',
-    admin_new_prolongation_rqst: 'Новая заявка на продление/выплату',
+    admin_new_prolongation_rqst: ({ actionToProlong, amount, name, username }) => {
+      const actionText = actionToProlong === 'get_part_sum' ? 'запросил выплату части суммы'
+        : actionToProlong === 'get_all_sum' ? 'запросил выплату всей суммы'
+        : 'продление всей суммы';
+      return `Новая заявка на продление/выплату\n\nчто запросил: ${actionText}\nсумма: ${amount} EUR\nпользователь: ${name}\nusername: ${username || 'no username'}`;
+    },
     admin_time_to_prolong: ({ name, dateUntil, username }) =>
       `У пользователя скоро заканчивается срок портфеля\n\nname: ${name}\nдата окончания портфеля: ${dateUntil}\nusername: ${username || 'no username'}`,
     user_deposit_created: 'Ваш портфель создан',
@@ -18,10 +24,16 @@ export const messageTemplates = {
     open_app: 'Открыть приложение'
   },
   de: {
-    admin_new_deposit_rqst: 'Neuer Antrag auf Portfolio-Erstellung',
+    admin_new_deposit_rqst: ({ amount, currency, name, username }) =>
+      `Neuer Antrag auf Portfolio-Erstellung\n\nBetrag: ${amount} ${currency}\nBenutzer: ${name}\nUsername: ${username || 'no username'}`,
     admin_new_changepassword_rqst: 'Neue Anfrage zur Passwortänderung',
     admin_new_question: 'Neue Nachricht im Support-Bereich',
-    admin_new_prolongation_rqst: 'Neuer Antrag auf Verlängerung/Auszahlung',
+    admin_new_prolongation_rqst: ({ actionToProlong, amount, name, username }) => {
+      const actionText = actionToProlong === 'get_part_sum' ? 'Teilbetrag angefordert'
+        : actionToProlong === 'get_all_sum' ? 'Gesamtbetrag angefordert'
+        : 'Verlängerung des Gesamtbetrags';
+      return `Neuer Antrag auf Verlängerung/Auszahlung\n\nAnfrage: ${actionText}\nBetrag: ${amount} EUR\nBenutzer: ${name}\nUsername: ${username || 'no username'}`;
+    },
     admin_time_to_prolong: ({ name, dateUntil, username }) =>
       `Das Portfolio eines Benutzers läuft bald ab\n\nName: ${name}\nPortfolio-Enddatum: ${dateUntil}\nUsername: ${username || 'no username'}`,
     user_deposit_created: 'Ihr Portfolio wurde erstellt',

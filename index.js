@@ -836,7 +836,20 @@ app.post('/api/create_deposit_request', async (req, res) => {
       isOperated: false
     });
 
-    await sendTelegramMessage(process.env.ADMINTLG, 'admin_new_deposit_rqst');
+    // Отправляем уведомление админам
+    const adminTlgIds = process.env.ADMINTLG?.split(',').map(id => id.trim()).filter(Boolean) || [];
+    for (const adminTlgId of adminTlgIds) {
+      try {
+        await sendTelegramMessage(adminTlgId, 'admin_new_deposit_rqst', {
+          amount: normalizedAmount,
+          currency: cryptoCashCurrency,
+          name: username || user.name || 'unknown',
+          username: user.username
+        });
+      } catch (err) {
+        console.error(`Ошибка отправки уведомления админу ${adminTlgId}:`, err.message);
+      }
+    } 
 
     return res.json({
       status: 'success',
@@ -1547,7 +1560,23 @@ app.post('/api/deposit_prolong_action', async (req, res) => {
       linkToDepositProlongation: prolongation._id
     });
 
-    await sendTelegramMessage(process.env.ADMINTLG, 'admin_new_prolongation_rqst');
+    // Получаем данные пользователя для уведомления
+    const user = await UserModel.findById(deposit.user);
+
+    // Отправляем уведомление админам
+    const adminTlgIds = process.env.ADMINTLG?.split(',').map(id => id.trim()).filter(Boolean) || [];
+    for (const adminTlgId of adminTlgIds) {
+      try {
+        await sendTelegramMessage(adminTlgId, 'admin_new_prolongation_rqst', {
+          actionToProlong,
+          amount: normalizedAmount,
+          name: user?.name || 'unknown',
+          username: user?.username
+        });
+      } catch (err) {
+        console.error(`Ошибка отправки уведомления админу ${adminTlgId}:`, err.message);
+      }
+    }
 
     return res.json({
       status: 'success',
