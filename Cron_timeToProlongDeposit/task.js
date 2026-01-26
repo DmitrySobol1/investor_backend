@@ -8,13 +8,17 @@
 // node task.js
 
 // TEST
-import dotenv from 'dotenv';
-dotenv.config();
-console.log('DATABASE_URL:', process.env.DATABASE_URL ? 'loaded' : 'NOT LOADED');
+// import dotenv from 'dotenv';
+// dotenv.config();
+
 
 // PROD
-// import dotenv from 'dotenv';
-// dotenv.config({ path: '/root/investor/investor_backend/.env' });
+import dotenv from 'dotenv';
+dotenv.config({ path: '/root/investor/investor_backend/.env' });
+
+
+// EXECUTE
+// checkDepositsForProlong();
 
 
 import mongoose from 'mongoose';
