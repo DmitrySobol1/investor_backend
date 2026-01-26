@@ -17,6 +17,7 @@ import BitcoinPriceModel from './models/bitcoinPrice.js'
 import DepositOperationsModel from './models/deposit_operations.js'
 import CryptoRateModel from './models/cryptoRate.js'
 import DepositProlongationModel from './models/deposit_prolongation.js'
+import { sendTelegramMessage } from './utils/telegram.js';
 
 const app = express();
 const PORT = process.env.PORT || 4444;
@@ -538,59 +539,6 @@ async function createNewUser_fromBot(tlgid, username, firstname, language) {
 // ===============================================
 // Отправка сообщения в Telegram бота
 // ===============================================
-const messageTemplates = {
-  ru: {
-    admin_new_deposit_rqst: 'Новая заявка на создание портфеля',
-    admin_new_changepassword_rqst: 'Новый запрос на смену пароля',
-    admin_new_question: 'Пришло новое сообщение в разделе поддержка',
-    admin_new_prolongation_rqst: 'Новая заявка на продление/выплату',
-    user_deposit_created: 'Ваш портфель создан',
-    user_password_reseted: 'Вы можете установить новый пароль',
-    user_deposit_get_all_sum: 'Ваш портфель закрыт',
-    user_deposit_get_part_sum: 'Для вас создан новый портфель',
-    user_deposit_reinvest_all: 'Ваш портфель продлен',
-    open_app: 'Открыть приложение'
-  },
-  de: {
-    admin_new_deposit_rqst: 'Neuer Antrag auf Portfolio-Erstellung',
-    admin_new_changepassword_rqst: 'Neue Anfrage zur Passwortänderung',
-    admin_new_question: 'Neue Nachricht im Support-Bereich',
-    admin_new_prolongation_rqst: 'Neuer Antrag auf Verlängerung/Auszahlung',
-    user_deposit_created: 'Ihr Portfolio wurde erstellt',
-    user_password_reseted: 'Sie können jetzt ein neues Passwort festlegen',
-    user_deposit_get_all_sum: 'Ihr Portfolio wurde geschlossen',
-    user_deposit_get_part_sum: 'Ein neues Portfolio wurde für Sie erstellt',
-    user_deposit_reinvest_all: 'Ihr Portfolio wurde verlängert',
-    open_app: 'App öffnen'
-  }
-};
-
-async function sendTelegramMessage(tlgid, typeMessage) {
-  // Получаем язык пользователя из БД
-  const user = await UserModel.findOne({ tlgid });
-  const language = user?.language || 'de';
-
-  const templates = messageTemplates[language] || messageTemplates.de;
-  const text = templates[typeMessage];
-  const openAppText = templates.open_app;
-
-  if (!text) {
-    throw new Error(`Unknown message type: ${typeMessage}`);
-  }
-
-  await axios.post(
-    `https://api.telegram.org/bot${process.env.BOT_TOKEN}/sendMessage`,
-    {
-      chat_id: tlgid,
-      text,
-      reply_markup: {
-        inline_keyboard: [
-          [{ text: openAppText, web_app: { url: process.env.APP_URL } }]
-        ]
-      }
-    }
-  );
-}
 
 app.post('/api/sendMessage', async (req, res) => {
   try {
