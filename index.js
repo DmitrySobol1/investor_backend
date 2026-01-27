@@ -1163,13 +1163,15 @@ app.post('/api/admin_add_refund/:depositId', async (req, res) => {
 
     if (lastOperation) {
       // 2. Рассчитываем данные для новой операции
-      const nextWeekStart = new Date(lastOperation.week_date_finish);
-      nextWeekStart.setDate(nextWeekStart.getDate() + 1);
-      nextWeekStart.setHours(0, 0, 0, 0);
+      // const nextWeekStart = new Date(lastOperation.week_date_finish);
+      const nextWeekStart = new Date(lastOperation.week_date_start);
+      // nextWeekStart.setDate(nextWeekStart.getDate() + 1);
+      // nextWeekStart.setHours(0, 0, 0, 0);
 
-      const nextWeekEnd = new Date(nextWeekStart);
-      nextWeekEnd.setDate(nextWeekStart.getDate() + 6);
-      nextWeekEnd.setHours(23, 59, 59, 999);
+      // const nextWeekEnd = new Date(nextWeekStart);
+      const nextWeekEnd = new Date(lastOperation.week_date_finish);
+      // nextWeekEnd.setDate(nextWeekStart.getDate() + 6);
+      // nextWeekEnd.setHours(23, 59, 59, 999);
 
       const newFinishAmount = lastOperation.week_finish_amount + value;
       const nextWeekNumber = Math.ceil(lastOperation.number_of_week);
