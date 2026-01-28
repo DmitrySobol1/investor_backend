@@ -1712,13 +1712,14 @@ app.post('/api/admin_mark_prolongation_operated', async (req, res) => {
     // Обработка в зависимости от типа действия
     if (prolongation.actionToProlong === 'get_all_sum') {
       // Закрываем депозит (портфель)
-      await DepositModel.findByIdAndUpdate(
+      const deposit = await DepositModel.findByIdAndUpdate(
         prolongation.linkToDeposit,
-        { isActive: false }
-      );
+        { isActive: false },
+        { new: true }
+      ).populate('user');
 
       // Отправить уведомление пользователю
-      await sendTelegramMessage(oldDeposit.user.tlgid, 'user_deposit_get_all_sum');
+      await sendTelegramMessage(deposit.user.tlgid, 'user_deposit_get_all_sum');
 
       resultMessage = 'Сумма выплачена, портфель закрыт';
     }
@@ -1797,7 +1798,7 @@ app.post('/api/admin_mark_prolongation_operated', async (req, res) => {
 
     // Обработка реинвестирования всей суммы
     if (prolongation.actionToProlong === 'reinvest_all') {
-      const deposit = await DepositModel.findById(prolongation.linkToDeposit);
+      const deposit = await DepositModel.findById(prolongation.linkToDeposit).populate('user');
       const newDateUntil = new Date(deposit.date_until);
       newDateUntil.setDate(newDateUntil.getDate() + 365);
 
@@ -1807,7 +1808,7 @@ app.post('/api/admin_mark_prolongation_operated', async (req, res) => {
         date_until: newDateUntil
       });
 
-       await sendTelegramMessage(oldDeposit.user.tlgid, 'user_deposit_reinvest_all');
+      await sendTelegramMessage(deposit.user.tlgid, 'user_deposit_reinvest_all');
 
       resultMessage = 'Портфель продлен';
     }
