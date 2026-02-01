@@ -2094,7 +2094,15 @@ app.post('/api/new_changepassword_rqst', async (req, res) => {
       isOperated: false
     });
 
-    await sendTelegramMessage(process.env.ADMINTLG, 'admin_new_changepassword_rqst');
+    // Отправляем уведомление админам
+    const adminTlgIds = process.env.ADMINTLG?.split(',').map(id => id.trim()).filter(Boolean) || [];
+    for (const adminTlgId of adminTlgIds) {
+      try {
+        await sendTelegramMessage(adminTlgId, 'admin_new_changepassword_rqst');
+      } catch (err) {
+        console.error(`Ошибка отправки уведомления админу ${adminTlgId}:`, err.message);
+      }
+    }
 
     return res.json({
       status: 'success',
@@ -2139,8 +2147,15 @@ app.post('/api/new_request_to_support', async (req, res) => {
       question
     });
 
-    await sendTelegramMessage(process.env.ADMINTLG, 'admin_new_question' );
-
+    // Отправляем уведомление админам
+    const adminTlgIds = process.env.ADMINTLG?.split(',').map(id => id.trim()).filter(Boolean) || [];
+    for (const adminTlgId of adminTlgIds) {
+      try {
+        await sendTelegramMessage(adminTlgId, 'admin_new_question');
+      } catch (err) {
+        console.error(`Ошибка отправки уведомления админу ${adminTlgId}:`, err.message);
+      }
+    }
 
     return res.json({
       status: 'success',
