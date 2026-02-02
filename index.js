@@ -2470,6 +2470,113 @@ app.post('/api/update_crypto_rate', async (req, res) => {
 
 
 // ==========================================
+// поменять даты по tlg id
+// ==========================================
+
+app.post('/api/admin_update_operation_dates', async (req, res) => {
+  try {
+    const { tlgid } = req.body;
+
+    // 1. Найти пользователя по tlgid
+    const user = await UserModel.findOne({ tlgid });
+    if (!user) {
+      return res.status(404).json({ status: 'error', message: 'Пользователь не найден' });
+    }
+
+    // 2. Создать объект маппинга для обновления недель
+    const weekMapping = {
+      4: { newWeek: 1, start: new Date('2026-01-01T10:00:00.000Z'), finish: new Date('2026-01-04T10:00:00.000Z') },
+      5: { newWeek: 2, start: new Date('2026-01-05T10:00:00.000Z'), finish: new Date('2026-01-11T10:00:00.000Z') },
+      6: { newWeek: 3, start: new Date('2026-01-12T10:00:00.000Z'), finish: new Date('2026-01-18T10:00:00.000Z') },
+      7: { newWeek: 4, start: new Date('2026-01-19T10:00:00.000Z'), finish: new Date('2026-01-25T10:00:00.000Z') },
+      8: { newWeek: 5, start: new Date('2026-01-26T10:00:00.000Z'), finish: new Date('2026-02-01T10:00:00.000Z') }
+    };
+
+    // 3. Найти все операции пользователя
+    const operations = await DepositOperationsModel.find({ user_link: user._id });
+
+    // 4. Обновить операции в цикле
+    let updatedCount = 0;
+    for (const op of operations) {
+      const mapping = weekMapping[op.number_of_week];
+      if (mapping) {
+        await DepositOperationsModel.findByIdAndUpdate(op._id, {
+          number_of_week: mapping.newWeek,
+          week_date_start: mapping.start,
+          week_date_finish: mapping.finish
+        });
+        updatedCount++;
+      }
+    }
+
+    // 5. Вернуть результат
+    res.json({
+      status: 'success',
+      data: {
+        updatedCount,
+        message: `Обновлено операций: ${updatedCount}`
+      }
+    });
+  } catch (error) {
+    console.error('Error updating operation dates:', error);
+    res.status(500).json({ status: 'error', message: error.message });
+  }
+});
+
+
+// ==========================================
+// поменять даты по deposit id
+// ==========================================
+
+app.post('/api/admin_update_operation_dates_by_deposit', async (req, res) => {
+  try {
+    const { depositid } = req.body;
+
+    // 1. Создать объект маппинга для обновления недель
+    const weekMapping = {
+      4: { newWeek: 1, start: new Date('2026-01-01T10:00:00.000Z'), finish: new Date('2026-01-04T10:00:00.000Z') },
+      5: { newWeek: 2, start: new Date('2026-01-05T10:00:00.000Z'), finish: new Date('2026-01-11T10:00:00.000Z') },
+      6: { newWeek: 3, start: new Date('2026-01-12T10:00:00.000Z'), finish: new Date('2026-01-18T10:00:00.000Z') },
+      7: { newWeek: 4, start: new Date('2026-01-19T10:00:00.000Z'), finish: new Date('2026-01-25T10:00:00.000Z') },
+      8: { newWeek: 5, start: new Date('2026-01-26T10:00:00.000Z'), finish: new Date('2026-02-01T10:00:00.000Z') }
+    };
+
+    // 2. Найти все операции по deposit_link
+    const operations = await DepositOperationsModel.find({ deposit_link: depositid });
+
+    // 3. Обновить операции в цикле
+    let updatedCount = 0;
+    for (const op of operations) {
+      const mapping = weekMapping[op.number_of_week];
+      if (mapping) {
+        await DepositOperationsModel.findByIdAndUpdate(op._id, {
+          number_of_week: mapping.newWeek,
+          week_date_start: mapping.start,
+          week_date_finish: mapping.finish
+        });
+        updatedCount++;
+      }
+    }
+
+    // 4. Вернуть результат
+    res.json({
+      status: 'success',
+      data: {
+        updatedCount,
+        message: `Обновлено операций: ${updatedCount}`
+      }
+    });
+  } catch (error) {
+    console.error('Error updating operation dates by deposit:', error);
+    res.status(500).json({ status: 'error', message: error.message });
+  }
+});
+
+
+
+
+
+// ==========================================
 // получение депозитов по until_date
 // ==========================================
 

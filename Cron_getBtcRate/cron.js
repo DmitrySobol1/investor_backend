@@ -10,7 +10,7 @@ dotenv.config({ path: '/root/investor/investor_backend/.env' });
 
 
 cron.schedule(
-  '5 0 * * *',
+  '5 4 * * *',
   async () => {
     console.log('🚀 Запуск задачи1... | Получаю курс BTC', new Date().toISOString());
 
