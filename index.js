@@ -1682,7 +1682,7 @@ app.get('/api/admin_get_deposit_prolongation_one/:prolongationId', async (req, r
 // ===============================================
 app.post('/api/admin_mark_prolongation_operated', async (req, res) => {
   try {
-    const { prolongationId, finalAmount } = req.body;
+    const { prolongationId, newPortfolioAmount } = req.body;
 
     if (!prolongationId) {
       return res.status(400).json({
@@ -1726,18 +1726,17 @@ app.post('/api/admin_mark_prolongation_operated', async (req, res) => {
 
     // Обработка частичного вывода - закрыть старый депозит, создать новый
     if (prolongation.actionToProlong === 'get_part_sum') {
-      const withdrawAmount = parseFloat(String(finalAmount).replace(',', '.'));
+      const newAmountInEur = Math.floor(parseFloat(String(newPortfolioAmount)));
+
+      if (isNaN(newAmountInEur) || newAmountInEur <= 0) {
+        return res.status(400).json({
+          status: 'error',
+          message: 'newPortfolioAmount must be a positive number'
+        });
+      }
 
       // 1. Получить старый депозит с populate user
       const oldDeposit = await DepositModel.findById(prolongation.linkToDeposit).populate('user');
-
-      // 2. Получить текущую стоимость портфеля (последняя операция)
-      const lastOperation = await DepositOperationsModel.findOne({
-        deposit_link: prolongation.linkToDeposit
-      }).sort({ createdAt: -1 });
-
-      const currentPortfolioValue = lastOperation.week_finish_amount;
-      const newAmountInEur = currentPortfolioValue - withdrawAmount;
 
       // 3. Закрыть старый депозит
       await DepositModel.findByIdAndUpdate(prolongation.linkToDeposit, {
