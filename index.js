@@ -1682,7 +1682,7 @@ app.get('/api/admin_get_deposit_prolongation_one/:prolongationId', async (req, r
 // ===============================================
 app.post('/api/admin_mark_prolongation_operated', async (req, res) => {
   try {
-    const { prolongationId, newPortfolioAmount } = req.body;
+    const { prolongationId, newPortfolioAmount, updatedRequestedAmount } = req.body;
 
     if (!prolongationId) {
       return res.status(400).json({
@@ -1704,7 +1704,7 @@ app.post('/api/admin_mark_prolongation_operated', async (req, res) => {
     // Помечаем prolongation как обработанную
     await DepositProlongationModel.findByIdAndUpdate(
       prolongationId,
-      { isOperated: true }
+      { isOperated: true, ...(updatedRequestedAmount != null && { amount: updatedRequestedAmount }) }
     );
 
     let resultMessage = 'Заявка обработана';
